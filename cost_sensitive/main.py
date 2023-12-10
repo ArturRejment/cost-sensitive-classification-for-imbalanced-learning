@@ -3,101 +3,109 @@ import pandas as pd
 
 from sklearn.preprocessing import LabelEncoder
 
-
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.base import clone
-from sklearn.datasets import make_classification
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
-from sklearn.neighbors import KNeighborsClassifier
-from sklearn.model_selection import RepeatedStratifiedKFold, cross_val_score
-from sklearn.metrics import balanced_accuracy_score, roc_auc_score
-from sklearn.model_selection import train_test_split
-
-from metacost import CustomMetaCostClassifier
-from mymetacost import MetaCost
+from sklearn.model_selection import RepeatedStratifiedKFold
+from sklearn.metrics import roc_auc_score, fbeta_score
 
 
-# df = pd.read_csv("diabetes.csv")
-# headers = [
-#     "race", "gender", "age", "addmision_source", "medical_speciality", "primary_diagnosis",
-#     "max_glu_serum", "A1Cresult", "insulin", "change", "diabetesMed", "medicare",
-#     "medicaid", "had_emergency", "had_inpatient_days", "had_outpatient_days", "readmitted"
-# ]
-#
-# le = LabelEncoder()
-# for header in headers:
-#     label = le.fit_transform(df[header])
-#     df.drop(header, axis=1, inplace=True)
-#     df[header] = label
+datasets_last_nominal = [
+    "../datasets/cleveland-0_vs_4.csv",
+    "../datasets/dermatology-6.csv",
+    "../datasets/ecoli3.csv",
+    "../datasets/ecoli-0-6-7_vs_3-5.csv",
+    "../datasets/haberman.csv",
+    "../datasets/pima.csv",
+    "../datasets/wisconsin.csv",
+]
 
+datasets_all_nominal = [
+    "../datasets/stroke.csv",
+    "../datasets/creditcard.csv",
+    "../datasets/heart_2022_no_nans.csv",
+]
 
-# data = df.values
-# X = data[:, :-1]
-# y = data[:, -1]
-# #
+datasets_multi_class = [
+    "../datasets/dermatology.csv"
+]
 
+# PREPARE DATASETS
+datasets = {}
+
+for dataset_name in datasets_last_nominal:
+    df = pd.read_csv(dataset_name)
+    header = df.columns[-1]
+    le = LabelEncoder()
+    label = le.fit_transform(df[header])
+    df.drop(header, axis=1, inplace=True)
+    df[header] = label
+    data = df.values
+    datasets[dataset_name] = data
+
+le = LabelEncoder()
+for dataset_name in datasets_all_nominal:
+    df = pd.read_csv(dataset_name)
+    for header in df.columns:
+        label = le.fit_transform(df[header])
+        df.drop(header, axis=1, inplace=True)
+        df[header] = label
+    datasets[dataset_name] = df.values
+
+for dataset_name in datasets_multi_class:
+    df = pd.read_csv(dataset_name)
+    datasets[dataset_name] = df.values
 
 weights = [
     None,
-    {0: 5, 1: 1},
     {0: 20, 1: 1},
-    {0: 50, 1: 1},
-    {0: 100, 1: 1},
-    {0: 1, 1: 5},
-    {0: 1, 1: 20},
-    {0: 1, 1: 50},
-    {0: 1, 1: 100},
     'balanced',
 ]
 
-rskf = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=1410)
 
+# PREPARE CLFs
 clfs = []
-
-for weight in weights:
-    clfs.append(
-        RandomForestClassifier(class_weight=weight),
-    )
-
 for weight in weights:
     clfs.append(
         DecisionTreeClassifier(class_weight=weight),
     )
-
+for weight in weights:
+    clfs.append(
+        RandomForestClassifier(class_weight=weight),
+    )
 for weight in weights:
     clfs.append(
         SVC(class_weight=weight),
     )
 
-# for weight in costs:
-#     clfs.append(
-#         CustomMetaCostClassifier(df, DecisionTreeClassifier(), weight),
-#     )
-
 
 rskf = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=1410)
 
-for clf in clfs:
-    print(clf)
+for name, data in datasets.items():
 
-    roc = []
-    bac = []
-    for fold_id, (train, test) in enumerate(rskf.split(X, y)):
-        X_train = X[train]
-        X_test = X[test]
-        y_train = y[train]
+    X = data[:, :-1]
+    y = data[:, -1]
 
-        clf.fit(X_train, y_train)
-        y_pred = clf.predict(X_test)
+    for clf in clfs:
+        print(clf)
 
-        bac_score = balanced_accuracy_score(y[test], y_pred)
-        roc_auc = roc_auc_score(y[test], y_pred)
+        roc = []
+        fbeta = []
+        for fold_id, (train, test) in enumerate(rskf.split(X, y)):
+            X_train = X[train]
+            X_test = X[test]
+            y_train = y[train]
 
-        roc.append(roc_auc)
-        bac.append(bac_score)
+            clf.fit(X_train, y_train)
+            y_pred = clf.predict(X_test)
 
-    print(f'ROC AUC: {np.mean(roc)}')
-    print(f'BAC: {np.mean(bac)}')
+            # roc_auc = roc_auc_score(y[test], y_pred)
+            fbeta_sc = fbeta_score(y[test], y_pred, beta=0.5, average="micro")
 
-    print("-" *40)
+            # roc.append(roc_auc)
+            fbeta.append(fbeta_sc)
+
+        # print(f'ROC AUC: {np.mean(roc)}')
+        print(f'FBeta: {np.mean(fbeta)}')
+
+        print("-" *40)
