@@ -26,59 +26,52 @@ def prepare_clfs(weights):
         )
     for weight in weights:
         clfs.append(
-            SVC(class_weight=weight),
+            SVC(class_weight=weight, probability=True),
         )
     return clfs
 
 
-datasets_last_nominal = [
-    "../datasets/cleveland-0_vs_4.csv",
-    "../datasets/dermatology-6.csv",
-    "../datasets/ecoli3.csv",
-    "../datasets/ecoli-0-6-7_vs_3-5.csv",
-    "../datasets/haberman.csv",
-    "../datasets/pima.csv",
-    "../datasets/wisconsin.csv",
-]
-
-datasets_all_nominal = [
-    "../datasets/stroke.csv",
-    "../datasets/creditcard.csv",
-    "../datasets/heart_2022_no_nans.csv",
-]
-
-datasets_multiclass = [
-    "../datasets/dermatology.csv"
-]
-
-# PREPARE DATASETS
-datasets = {}
-
-binary_weights = [
+weights_binary = [
     None,
     {0: 20, 1: 1},
     'balanced'
 ]
 
-multiclass_weights = [
+weights_multiclass_3 = [
+    None,
+    {1: 10, 2: 1, 3: 1},
+    'balanced'
+]
+
+weights_multiclass_6 = [
     None,
     {1: 10, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1},
     'balanced'
 ]
 
-le = LabelEncoder()
-for dataset_name in datasets_last_nominal:
-    df = pd.read_csv(dataset_name)
-    header = df.columns[-1]
-    label = le.fit_transform(df[header])
-    df.drop(header, axis=1, inplace=True)
-    df[header] = label
-    datasets[dataset_name] = {
-        'data': df.values,
-        'weights': binary_weights
-    }
+datasets_init = [
+    {'dataset': "../datasets/cleveland-0_vs_4.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/dermatology-6.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/ecoli3.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/ecoli-0-6-7_vs_3-5.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/haberman.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/pima.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/wisconsin.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/stroke.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/creditcard.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/heart.csv", 'weights': weights_multiclass_3},
+    {'dataset': "../datasets/dermatology.csv", 'weights': weights_multiclass_6},
+]
 
-for dataset_name in datasets_all_nominal:
+# PREPARE DATASETS
+datasets = {}
+
+le = LabelEncoder()
+
+for dataset in datasets_init:
+    dataset_name = dataset['dataset']
+    dataset_weights = dataset['weights']
+
     df = pd.read_csv(dataset_name)
     for header in df.columns:
         label = le.fit_transform(df[header])
@@ -86,23 +79,16 @@ for dataset_name in datasets_all_nominal:
         df[header] = label
     datasets[dataset_name] = {
         'data': df.values,
-        'weights': binary_weights
-    }
-
-for dataset_name in datasets_multiclass:
-    df = pd.read_csv(dataset_name)
-    datasets[dataset_name] = {
-        'data': df.values,
-        'weights': multiclass_weights
+        'weights': dataset_weights
     }
 
 rskf = RepeatedStratifiedKFold(n_splits=5, n_repeats=2, random_state=1410)
 
-scores = np.zeros(shape=(len(datasets), NUM_CLASSIFIERS*3, rskf.get_n_splits(), NUM_METRICS))
+scores = np.zeros(shape=(len(datasets), NUM_CLASSIFIERS * 3, rskf.get_n_splits(), NUM_METRICS))
 
 for dataset_idx, (name, item) in enumerate(datasets.items()):
-    print("*" * 40)
-    print(name, '\n')
+    print("=" * 40)
+    print(name.split('/')[-1], '\n')
 
     data = item["data"]
     weights = item["weights"]
@@ -124,9 +110,14 @@ for dataset_idx, (name, item) in enumerate(datasets.items()):
 
             clf = clone(est)
             clf.fit(X_train, y_train)
+
+            y_pred_proba = clf.predict_proba(X_test)
+            if y_pred_proba.shape[1] == 2:
+                y_pred_proba = y_pred_proba[:, 1]
+
             y_pred = clf.predict(X_test)
 
-            roc_auc_sc = roc_auc_score(y[test], y_pred)
+            roc_auc_sc = roc_auc_score(y[test], y_pred_proba, multi_class="ovr", average="weighted")
             fbeta_sc = fbeta_score(y[test], y_pred, beta=0.5, average="weighted")
 
             scores[dataset_idx, est_idx, fold_idx, 0] = roc_auc_sc
@@ -135,7 +126,7 @@ for dataset_idx, (name, item) in enumerate(datasets.items()):
             roc.append(roc_auc_sc)
             fbeta.append(fbeta_sc)
 
-        print(f"ROC: {np.mean(roc)}")
+        print(f"AUC: {np.mean(roc)}")
         print(f"F-BETA: {np.mean(fbeta)}")
 
 np.save("scores", scores)
