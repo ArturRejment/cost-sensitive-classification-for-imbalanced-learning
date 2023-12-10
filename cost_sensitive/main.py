@@ -79,7 +79,7 @@ for weight in weights:
     )
 
 
-rskf = RepeatedStratifiedKFold(n_splits=5, n_repeats=3, random_state=1410)
+rskf = RepeatedStratifiedKFold(n_splits=5, n_repeats=2, random_state=1410)
 
 for name, data in datasets.items():
 
