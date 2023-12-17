@@ -7,12 +7,11 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.svm import SVC
 from sklearn.model_selection import RepeatedStratifiedKFold
-from sklearn.metrics import roc_auc_score, fbeta_score
+from sklearn.metrics import balanced_accuracy_score
 from sklearn.base import clone
 
 NUM_CLASSIFIERS = 3
-NUM_METRICS = 2
-
+NUM_METRICS = 1
 
 def prepare_clfs(weights):
     clfs = []
@@ -33,19 +32,12 @@ def prepare_clfs(weights):
 
 weights_binary = [
     None,
+    {0: 5, 1: 1},
+    {0: 10, 1: 1},
     {0: 20, 1: 1},
-    'balanced'
-]
-
-weights_multiclass_3 = [
-    None,
-    {1: 10, 2: 1, 3: 1},
-    'balanced'
-]
-
-weights_multiclass_6 = [
-    None,
-    {1: 10, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1},
+    {0: 1, 1: 5},
+    {0: 1, 1: 10},
+    {0: 1, 1: 20},
     'balanced'
 ]
 
@@ -57,10 +49,10 @@ datasets_init = [
     {'dataset': "../datasets/haberman.csv", 'weights': weights_binary},
     {'dataset': "../datasets/pima.csv", 'weights': weights_binary},
     {'dataset': "../datasets/wisconsin.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/flare-F.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/shuttle-c0-vs-c4.csv", 'weights': weights_binary},
+    {'dataset': "../datasets/yeast3.csv", 'weights': weights_binary},
     {'dataset': "../datasets/stroke.csv", 'weights': weights_binary},
-    {'dataset': "../datasets/creditcard.csv", 'weights': weights_binary},
-    {'dataset': "../datasets/heart.csv", 'weights': weights_multiclass_3},
-    {'dataset': "../datasets/dermatology.csv", 'weights': weights_multiclass_6},
 ]
 
 # PREPARE DATASETS
@@ -84,7 +76,7 @@ for dataset in datasets_init:
 
 rskf = RepeatedStratifiedKFold(n_splits=5, n_repeats=2, random_state=1410)
 
-scores = np.zeros(shape=(len(datasets), NUM_CLASSIFIERS * 3, rskf.get_n_splits(), NUM_METRICS))
+scores = np.zeros(shape=(len(datasets), NUM_CLASSIFIERS * len(weights_binary), rskf.get_n_splits(), NUM_METRICS))
 
 for dataset_idx, (name, item) in enumerate(datasets.items()):
     print("=" * 40)
@@ -101,8 +93,7 @@ for dataset_idx, (name, item) in enumerate(datasets.items()):
         print("-" * 30)
         print(est)
 
-        roc = []
-        fbeta = []
+        bac = []
         for fold_idx, (train, test) in enumerate(rskf.split(X, y)):
             X_train = X[train]
             X_test = X[test]
@@ -117,16 +108,12 @@ for dataset_idx, (name, item) in enumerate(datasets.items()):
 
             y_pred = clf.predict(X_test)
 
-            roc_auc_sc = roc_auc_score(y[test], y_pred_proba, multi_class="ovr", average="weighted")
-            fbeta_sc = fbeta_score(y[test], y_pred, beta=0.5, average="weighted")
+            balanced_accuracy = balanced_accuracy_score(y[test], y_pred)
 
-            scores[dataset_idx, est_idx, fold_idx, 0] = roc_auc_sc
-            scores[dataset_idx, est_idx, fold_idx, 1] = fbeta_sc
+            scores[dataset_idx, est_idx, fold_idx, 0] = balanced_accuracy
 
-            roc.append(roc_auc_sc)
-            fbeta.append(fbeta_sc)
+            bac.append(balanced_accuracy)
 
-        print(f"AUC: {np.mean(roc)}")
-        print(f"F-BETA: {np.mean(fbeta)}")
+        print(f"BAC: {np.mean(bac)}")
 
-np.save("scores", scores)
+# np.save("scores", scores)
